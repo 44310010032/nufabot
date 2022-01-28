@@ -1,0 +1,18 @@
+Silahkan kirim link postingan dari sosial media yang ingin didownload
+
+*Supported links :*
+├• Facebook 
+├• Tiktok
+├• Instagram
+├• Pinterest
+└• Twitter
+ 
+*CMD :*
+├• prefix stiker
+├• prefix yt <url>
+├• prefix ytsearch <query>
+├• prefix ytmp4 <url>
+├• prefix ytmp3 <url>
+└• prefix play <judul>
+
+*Note:* Jika BOT tidak merespon dalam 10 detik, silahkan kirim ulang

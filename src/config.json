@@ -1,0 +1,18 @@
+{
+	"owner" : ["6285255646434@s.whatsapp.net"],
+	"api": {
+		"masgi": "https://masgimenz.my.id"
+	},
+	"autoReads": true,
+	"footer": "Nufa BOT",
+	"session_id": "51158150518%3AEFBFnx9yY9m2ox%3A20",
+	"stickerCategories": {
+		    "love": ["💖", "💘", "💝"],
+        "happy": ["😀", "😃", "😄", "😁", "😆"],
+        "sad": ["☹", "😣", "😖", "😫", "😩", "😢", "😭"],
+        "angry": ["🤬", "😡", "😠", "🙄", "👿"],
+        "greet": ["👋"],
+        "celebrate": ["🎉", "🎁", "🎈"]
+	},
+	"quot": "```"
+}
