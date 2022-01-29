@@ -12,7 +12,8 @@ const {
     proto,
     generateWAMessageContent,
     WAProto,
-} = require('@adiwajshing/baileys-md');
+    isJidGroup,
+} = require('@adiwajshing/baileys');
 const pino = require('pino');
 const CFonts = require('cfonts');
 const gradient = require('gradient-string');
@@ -158,19 +159,19 @@ client.ev.on('group-participants.update', async (anu) => {
     client.ev.on('creds.update', () => saveState)
     client.ev.on('messages.upsert', async (msg) => {
         try {
-
             if (!msg.messages) return
             const m = msg.messages[0]
             if (m.key.fromMe) return
             const from = m.key.remoteJid;
-            let type = Object.keys(m.message)[0];
+            let type = client.msgType = Object.keys(m.message)[0];
+            //console.log(m.message.listResponseMessage.singleSelectReply.selectedRowId);
             Serialize(client, m)
             const content = JSON.stringify(JSON.parse(JSON.stringify(msg)).messages[0].message)
             let t = m.messageTimestamp
+            client.time = moment.tz('Asia/Jakarta').format('DD/MM HH:mm:ss')
             const body = (type === 'conversation') ? m.message.conversation : (type == 'imageMessage') ? m.message.imageMessage.caption : (type == 'videoMessage') ? m.message.videoMessage.caption : (type == 'extendedTextMessage') ? m.message.extendedTextMessage.text : (type == 'buttonsResponseMessage') ? m.message.buttonsResponseMessage.selectedButtonId : (type == 'listResponseMessage') ? m.message.listResponseMessage.singleSelectReply.selectedRowId : (type == 'templateButtonReplyMessage') ? m.message.templateButtonReplyMessage.selectedId : (type === 'messageContextInfo') ? (m.message.listResponseMessage.singleSelectReply.selectedRowId || m.message.buttonsResponseMessage.selectedButtonId || m.text) : ''
-
         
-            const isGroupMsg = m.key.remoteJid.endsWith('@g.us')
+            const isGroupMsg = isJidGroup(from)
             const isMedia = (type === 'imageMessage' || type === 'videoMessage')
             const isQuotedImage = type === 'extendedTextMessage' && content.includes('imageMessage')
             const isQuotedVideo = type === 'extendedTextMessage' && content.includes('videoMessage')
@@ -492,15 +493,13 @@ client.ev.on('group-participants.update', async (anu) => {
                 }
             }
 
-            if (/https:\/\/www\.instagram\.com\/s\/.+story_media_id=([\w-]+)/g.test(body) && !m.isBot) 
-          {
-            // if(isIgPostUrl(body) && !m.isBot){
+            if (/https:\/\/www\.instagram\.com\/s\/.+story_media_id=([\w-]+)/g.test(body) && !m.isBot) {
                 const link_highlight = /https:\/\/www\.instagram\.com\/s\/(.*?)\?story_media_id=([\w-]+)/g.exec(body)[0]
                 try {
                     await typing(from)
                     logEvent(link_highlight);
                     const username = await axios.get(link_highlight).then(async res => {
-                        const { data } = await axios.get(res.request.res.responseUrl + '?__a=1')
+                        const { data } = await axios.get(res.request.res.responseUrl + '?__a=1', { headers: { cookie: 'sessionid='+config.session_id}})
                         return data.user.username;
                     })
                     let [, highlightId, mediaId] = /https:\/\/www\.instagram\.com\/s\/(.*?)\?story_media_id=([\w-]+)/g.exec(link_highlight)
@@ -601,13 +600,13 @@ client.ev.on('group-participants.update', async (anu) => {
                         durasi += duration
                         url = `https://www.youtube.com/watch?v=${videoId}`
                     }
-                    const { dl_link, filesizeF, thumb, title } = await mp3(url);
+                    const { meta, path, size} = await mp3(url);
                     let capt = `✅ *Musik ditemukan!*\n`;
-                    capt +=title;
-                    cmd == 'ytmp3' ? '' : capt += `\nDurasi : ${durasi}`
-                    capt += '\nSize : ' + filesizeF;
+                    capt += meta.videoDetails.title;
+                    capt += `\nDurasi : ${moment.utc(meta.videoDetails.lengthSeconds * 1000).format('mm:ss')}`
+                    capt += '\nSize : ' + humanFileSize(size, true);
                     await reply(capt);
-                    await sendFileFromUrl(from, dl_link, '', m, 'from', 'mp3', { fileName: title + '.mp3' })
+                    await sendFile(from, path, `${meta.videoDetails.title}.mp3`, 'audio/mp3', m, { jpegThumbnail: (await getBuffer(meta.videoDetails.thumbnails.slice(-1)[0].url)).buffer })
                 } catch (error) {
                     reply('_Wahh! Nampaknya ada yang error!_')
                     console.log(error);
@@ -638,7 +637,6 @@ client.ev.on('group-participants.update', async (anu) => {
                             `🐓 Channel : ${data.channel}`
                         const templateButtons = [
                             { quickReplyButton: { displayText: `360p [${humanFileSize(Number(data.dl_link['360p'].contentLength), true, 1)}]`, id: `${prefix}ytmp4 ${url} | 360p` } },
-                            { quickReplyButton: { displayText: `480p [${humanFileSize(Number(data.dl_link['480p'].contentLength), true, 1)}]`, id: `${prefix}ytmp4 ${url} | 480p` } },
                             { quickReplyButton: { displayText: `mp3`, id: `${prefix}ytmp3 ${url}` } },
                         ]
                         let img = await getBuffer(data.thumb)
@@ -658,7 +656,7 @@ client.ev.on('group-participants.update', async (anu) => {
                         await client.sendMessage(from, op, { quoted: m })
                     } else {
                         await waiting(from, m)
-                        let quality = arg.split('|')[1].trim() || '360p'
+                        let quality = '360p'
                         const data = await mp4(url)
                         let caption = `ℹ Judul : ${data.title}\n` +
                             `⌛ Durasi : ${moment.utc(data.duration * 1000).format('HH:mm:ss')}\n` +
@@ -931,40 +929,36 @@ client.ev.on('group-participants.update', async (anu) => {
             mentionedJid = mentionedJid ? parseMention(mentionedJid) : []
             let mime = mimetype.split('/')[0]
             let thumb = await generateThumbnail(filepath, mime)
-            if (mime == 'gif') {
+            if (mimetype == 'image/gif' || options.gif) {
                 await client.sendPresenceUpdate('composing', jid)
-                const message = await prepareWAMessageMedia({ video: { url: filepath }, caption, gifPlayback: true, mentions: mentionedJid, jpegThumbnail: thumb, ...options }, { upload: client.waUploadToServer })
-                let media = generateWAMessageFromContent(jid, { videoMessage: message.videoMessage }, { quoted })
+                const message = await prepareWAMessageMedia({ video: { url: filepath }, caption, gifPlayback: true, gifAttribution: 1, mentions: mentionedJid, jpegThumbnail: thumb, ...options }, { upload: client.waUploadToServer })
+                let media = generateWAMessageFromContent(jid, { videoMessage: message.videoMessage }, { quoted, mediaUploadTimeoutMs: 600000 })
                 await client.relayMessage(jid, media.message, { messageId: media.key.id })
                 //await client.sendMessage(jid, { video: buffer, caption, gifPlayback: true, mentions: mentionedJid, jpegThumbnail: thumb, ...options }, { quoted })
-                fs.unlinkSync(filepath)
             } else if (mime == 'video') {
                 await client.sendPresenceUpdate('composing', jid)
                 client.refreshMediaConn(false)
                 const message = await prepareWAMessageMedia({ video: { url: filepath }, caption, mentions: mentionedJid, jpegThumbnail: thumb, ...options }, { upload: client.waUploadToServer })
-                let media = generateWAMessageFromContent(jid, { videoMessage: message.videoMessage }, { quoted })
+                let media = generateWAMessageFromContent(jid, { videoMessage: message.videoMessage }, { quoted, mediaUploadTimeoutMs: 600000 })
                 await client.relayMessage(jid, media.message, { messageId: media.key.id })
-                fs.unlinkSync(filepath)
             } else if (mime == 'image') {
                 await client.sendPresenceUpdate('composing', jid)
                 const message = await prepareWAMessageMedia({ image: { url: filepath }, caption, mentions: mentionedJid, jpegThumbnail: thumb, ...options }, { upload: client.waUploadToServer })
-                let media = generateWAMessageFromContent(jid, { imageMessage: message.imageMessage }, { quoted })
+                let media = generateWAMessageFromContent(jid, { imageMessage: message.imageMessage }, { quoted, mediaUploadTimeoutMs: 600000 })
                 await client.relayMessage(jid, media.message, { messageId: media.key.id })
-                fs.unlinkSync(filepath)
             } else if (mime == 'audio') {
                 await client.sendPresenceUpdate('recording', jid)
                 const message = await prepareWAMessageMedia({ document: { url: filepath }, mimetype: mimetype, fileName: options.fileName }, { upload: client.waUploadToServer })
-                let media = generateWAMessageFromContent(jid, { documentMessage: message.documentMessage }, { quoted })
+                let media = generateWAMessageFromContent(jid, { documentMessage: message.documentMessage }, { quoted, mediaUploadTimeoutMs: 600000 })
                 await client.relayMessage(jid, media.message, { messageId: media.key.id })
-                fs.unlinkSync(filepath)
             } else {
                 await client.sendPresenceUpdate('composing', jid)
                 client.refreshMediaConn(false)
                 const message = await prepareWAMessageMedia({ document: { url: filepath }, mimetype: mimetype, fileName: options.fileName }, { upload: client.waUploadToServer, })
-                let media = generateWAMessageFromContent(jid, { documentMessage: message.documentMessage }, { quoted })
+                let media = generateWAMessageFromContent(jid, { documentMessage: message.documentMessage }, { quoted, mediaUploadTimeoutMs: 600000 })
                 await client.relayMessage(jid, media.message, { messageId: media.key.id })
-                fs.unlinkSync(filepath)
             }
+            fs.unlinkSync(filepath)
         } catch (error) {
             client.sendMessage(jid, { text: `error => ${util.format(error)} ` }, { quoted })
         }
@@ -998,6 +992,26 @@ client.ev.on('group-participants.update', async (anu) => {
         let waMessageList = generateWAMessageFromContent(jid, messageList, { quoted, userJid: jid, contextInfo: { ...options } })
         return await client.relayMessage(jid, waMessageList.message, { messageId: waMessageList.key.id })
     }
+
+        /**
+     * send file as document, from path
+     * @param {string} jid 
+     * @param {string} path 
+     * @param {string} fileName 
+     * @param {string} mimetype 
+     * @param {any} quoted
+     * @returns
+     */
+         async function sendFile(jid, path, fileName, mimetype = '', quoted = '', options = {}) {
+            return await client.sendMessage(jid, { document: { url: path }, mimetype, fileName, ...options }, { quoted })
+                .then(() => {
+                    try {
+                        fs.unlinkSync(path)
+                    } catch (error) {
+                        console.log(error);
+                    }
+                })
+        }
 
     async function sendContact(jid, numbers, name, quoted, men) {
         let number = numbers.replace(/[^0-9]/g, '')
