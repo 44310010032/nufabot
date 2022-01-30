@@ -161,18 +161,6 @@ const formatPhone = function (number) {
 	return number.endsWith(S_WHATSAPP_NET) ? number : '62' + formatted;
 }
 
-const uploadImage = async (buffer) => {
-	buffer = Buffer.isBuffer(buffer) ? buffer : fs.existsSync(buffer) ? fs.readFileSync(buffer) : buffer
-	const { ext } = await fromBuffer(buffer);
-	const form = new FormData()
-	form.append('file', buffer, 'tmp.' + ext);
-	const res = await axios.post('https://telegra.ph/upload', form, {
-		headers: form.getHeaders()
-	})
-	const img = await res.data
-	if (img.error) throw img.error
-	return 'https://telegra.ph' + img[0].src
-}
 
 module.exports = {
 	processTime,
@@ -184,6 +172,5 @@ module.exports = {
 	humanFileSize,
 	fetchAPI,
 	formatPhone,
-	uploadImage,
 	shrt
 };

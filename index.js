@@ -40,7 +40,6 @@ const {
     shrt,
     fetchAPI,
     formatPhone,
-    uploadImage,
     getBuffer,
 } = require('./utils/function');
 const { Serialize } = require('./lib/simple');
@@ -116,8 +115,8 @@ client.ev.on('group-participants.update', async (anu) => {
             let meta = await client.groupMetadata(jid)
             let participants = anu.participants
             const buttons = [
-                      {buttonId: `${prefix}owner`, buttonText: {displayText: 'OWNER'}, type: 1},
-                      {buttonId: `${prefix}menu`, buttonText: {displayText: ' MENU'}, type: 1}
+                      {buttonId: `${prefix}owner`, buttonText: {displayText: ' Owner'}, type: 1},
+                      {buttonId: `${prefix}menu`, buttonText: {displayText: ' Menu'}, type: 1}
                     ]
             for (let x of participants) {
                 let dp;
@@ -135,7 +134,7 @@ client.ev.on('group-participants.update', async (anu) => {
                     { 
                       location: { jpegThumbnail: (await getBuffer(dp)).buffer, name: `${package.name}` },
                       mentions: [x],
-                      caption: `Selamat bergabung @${x.split('@')[0]} di group ${meta.subject}`, 
+                      caption: `Selamat bergabung @${x.split('@')[0]} di group ${meta.subject}\n\n`, 
                       footer: 'NufaBOT',
                       buttons: buttons,
                       headerType: 4
@@ -146,7 +145,7 @@ client.ev.on('group-participants.update', async (anu) => {
                       location: { jpegThumbnail: (await getBuffer('https://imgdb.net/storage/uploads/1c4ef351b6b387ab669400ca88fab1ead252d2019641a8f6d506d261c83e4017.png')).buffer, name: `${package.name}` },
                       mentions: [x], 
                       caption: `Selamat jalan @${x.split('@')[0]}, semoga harimu suram!`,
-                      buttons: buttons,
+                      templateButtons: buttons,
                       headerType: 4 
                     })
                 }
@@ -289,7 +288,32 @@ client.ev.on('group-participants.update', async (anu) => {
             const more = String.fromCharCode(8206)
             const readMore = more.repeat(4001)
             await reply('Pesan readmore' + readMore + 'ini lanjutannya', m)
-}
+            }
+
+            if (cmd == 'bc' && isOwner) {
+                try {
+                    if (args.length < 1) return reply('text nya mana?')
+                    reply(`sending broadcast message to *${chatsJid.length}* chats, estimated ${Math.floor((5 * chatsJid.length) / 60)} minutes done.`)
+                    if (isMedia || /image|video/i.test(m.quoted ? m.quoted.mtype : m.mtype)) {
+                        //const buff = await downloadMediaMessage(m.quoted ? m.quoted : m.message.imageMessage)
+                        for (let v of chatsJid) {
+                            await delay(5000)
+                            let ms = m.quoted ? m.getQuotedObj() : m
+                            await copyNForward(v, cMod(v, ms, `📢 *NufaBOT Broadcast*\n\n${args.join(' ')}\n\n#${chatsJid.indexOf(v) + 1}`, client.user.id), true)
+                        }
+                        reply(`Broadcasted to *${chatsJid.length}* chats`)
+                    } else {
+                        for (let v of chatsJid) {
+                            await delay(5000)
+                            await client.sendMessage(v, { text: `📢 *NufaBOT Broadcast*\n\n${args.join(' ')}\n\n#${chatsJid.indexOf(v) + 1}` }, { sendEphemeral: true })
+                        }
+                        reply(`Broadcasted to *${chatsJid.length}* chats`)
+                    }
+                } catch (error) {
+                    reply(util.format(error))
+                    console.log(error);
+                }
+            }
 
             // if (/vn/.test(cmd)) {
             //   vnku = fs.readFileSync('./src/vn.mp3')
@@ -316,11 +340,34 @@ client.ev.on('group-participants.update', async (anu) => {
               return reply ('⚠ Link group whatsapp terdeksi'), {quoted: m}
             }
 
+            if (cmd == 'removebg' || cmd == 'nobg' || cmd == 'rmbg') {
+                try {
+                    if (isMedia || isQuotedImage || m.quoted.mtype == 'documentMessage') {
+                        //const mediaData = await downloadMediaMessage(m.quoted ? m.quoted : m)
+                        const removed = await Sticker.removeBG(m.quoted ? await m.quoted.download() : await m.download());
+                        if (flags.find(v => v.match(/((doc)|ument)|file/))) {
+                            await client.sendMessage(from, { document: removed, fileName: sender.split('@')[0] + 'removed.png', mimetype: 'image/png', jpegThumbnail: removed }, { quoted: m })
+                        } else {
+                            await client.sendMessage(from, { image: removed, mimetype: 'image/png', caption: 'removed' }, { quoted: m })
+                        }
+                    } else if (isQuotedSticker) {
+                        const removed = await Sticker.removeBG(await m.quoted.download())
+                        const data = new Sticker(removed, { packname: package.name, author: package.author })
+                        await client.sendMessage(from, await data.toMessage(), { quoted: m })
+                    } else {
+                        reply(`send/reply image. example :\n${prefix + cmd}\n\ndocument result use --doc`)
+                    }
+                } catch (error) {
+                    console.log(error);
+                    reply('aww snap. error occurred')
+                }
+            }
+
             if (cmd == 'help' || cmd == 'menu') {
                 await typing(from)
                 const buttonsDefault = [
                     { urlButton: { displayText: `Rest API`, url: `https://azran.my.id` } },
-                     { urlButton: { displayText: `Instagram`, url: `https://instagram.com/theazran_` } },
+                    { urlButton: { displayText: `Instagram`, url: `https://instagram.com/theazran_` } },
                     { quickReplyButton: { displayText: `🔗 Link Group`, id: `${prefix}lg` } },
                     { quickReplyButton: { displayText: `💰 Donasi`, id: `${prefix}donasi` } },
                     { quickReplyButton: { displayText: `☎ Owner`, id: `${prefix}owner` } },
@@ -623,7 +670,7 @@ client.ev.on('group-participants.update', async (anu) => {
                     } else {
                         reply(`reply a video with caption ${prefix}${cmd}`)}
             }
-            
+
 
             if (cmd == 'yt' || cmd == 'ytmp4'){
                 try {
@@ -722,32 +769,7 @@ client.ev.on('group-participants.update', async (anu) => {
                     }
                 }    
             }
-
-            if (/^meme(sti(c|)ker)/.test(cmd)) {
-                if (isMedia || isQuotedImage) {
-                    try {
-                        let [atas, bawah] = args.join(' ').replace('--nobg', '').replace('--removebg', '').split('|')
-                        const mediaData = await downloadMediaMessage(m.quoted ? m.quoted : m)
-                        let bgUrl;
-                        if (flags.find(v => v.match(/nobg|removebg/))) {
-                            const removed = await Sticker.removeBG(mediaData)
-                            bgUrl = await uploadImage(removed)
-                        } else {
-                            bgUrl = await uploadImage(mediaData)
-                        }
-                        const res = await Sticker.memeGenerator(atas ? atas : '', bawah ? bawah : '', bgUrl)
-                        const data = new Sticker(res, { packname: package.name, author: package.author })
-                        await client.sendMessage(from, await data.toMessage(), { quoted: m })
-                    } catch (error) {
-                        console.log(error);
-                        reply('aww snap. error occurred')
-                    }
-                } else {
-                    reply(`send/reply image. example :\n${prefix + cmd} aku diatas | kamu dibawah\n\nwith no background use --nobg`)
-                }
-            }
-
-            
+          
             
 
             if (/toimg/i.test(cmd)) {
@@ -766,7 +788,6 @@ client.ev.on('group-participants.update', async (anu) => {
                     await reply('reply a sticker')
                 }
             }
-
 
              // Groups Moderation
              if (isCmd && isGroupMsg) {
@@ -910,6 +931,8 @@ client.ev.on('group-participants.update', async (anu) => {
             console.log(color('[ERROR]', 'red'), color(moment().format('DD/MM/YY HH:mm:ss'), '#A1FFCE'), error);
         }
     })
+
+
     
 
     /**
@@ -1002,6 +1025,8 @@ client.ev.on('group-participants.update', async (anu) => {
      * @param {any} quoted
      * @returns
      */
+
+        
          async function sendFile(jid, path, fileName, mimetype = '', quoted = '', options = {}) {
             return await client.sendMessage(jid, { document: { url: path }, mimetype, fileName, ...options }, { quoted })
                 .then(() => {
@@ -1012,6 +1037,7 @@ client.ev.on('group-participants.update', async (anu) => {
                     }
                 })
         }
+
 
     async function sendContact(jid, numbers, name, quoted, men) {
         let number = numbers.replace(/[^0-9]/g, '')
@@ -1036,6 +1062,101 @@ client.ev.on('group-participants.update', async (anu) => {
         return buffer
     }
 };
+
+// mtype
+
+async function sendAudio(jid, path, quoted, options = {}) {
+    let mimetype = getDevice(quoted.id) == 'ios' ? 'audio/mpeg' : 'audio/mp4'
+    await client.sendMessage(jid, { audio: { url: path }, mimetype, mp3: true, ...options }, { quoted })
+        .then(() => {
+            try {
+                fs.unlinkSync(path)
+            } catch (error) {
+                console.log(error);
+            }
+        })
+}
+/**
+ * 
+ * @param {string} jid 
+ * @param {proto.WebMessageInfo} message 
+ * @param {boolean} forceForward 
+ * @param {any} options 
+ * @returns 
+ */
+async function copyNForward(jid, message, forceForward = false, options = {}) {
+    let vtype
+    if (options.readViewOnce) {
+        message.message = message.message && message.message.ephemeralMessage && message.message.ephemeralMessage.message ? message.message.ephemeralMessage.message : (message.message || undefined)
+        vtype = Object.keys(message.message.viewOnceMessage.message)[0]
+        delete (message.message && message.message.ignore ? message.message.ignore : (message.message || undefined))
+        delete message.message.viewOnceMessage.message[vtype].viewOnce
+        message.message = {
+            ...message.message.viewOnceMessage.message
+        }
+    }
+
+    let mtype = Object.keys(message.message)[0]
+    let content = generateForwardMessageContent(message, forceForward)
+    let ctype = Object.keys(content)[0]
+    let context = {}
+    if (mtype != "conversation") context = message.message[mtype].contextInfo
+    content[ctype].contextInfo = {
+        ...context,
+        ...content[ctype].contextInfo
+    }
+    const waMessage = generateWAMessageFromContent(jid, content, options ? {
+        ...content[ctype],
+        ...options,
+        ...(options.contextInfo ? {
+            contextInfo: {
+                ...content[ctype].contextInfo,
+                ...options.contextInfo
+            }
+        } : {})
+    } : {})
+    await client.relayMessage(jid, waMessage.message, { messageId: waMessage.key.id })
+    return waMessage
+}
+
+/**
+ * 
+ * @param {string} jid 
+ * @param {proto.WebMessageInfo} copy 
+ * @param {string} text 
+ * @param {string} sender 
+ * @param {*} options 
+ * @returns 
+ */
+function cMod(jid, copy, text = '', sender = client.user.id, options = {}) {
+    //let copy = message.toJSON()
+    let mtype = Object.keys(copy.message)[0]
+    let isEphemeral = mtype === 'ephemeralMessage'
+    if (isEphemeral) {
+        mtype = Object.keys(copy.message.ephemeralMessage.message)[0]
+    }
+    let msg = isEphemeral ? copy.message.ephemeralMessage.message : copy.message
+    let content = msg[mtype]
+    if (typeof content === 'string') msg[mtype] = text || content
+    else if (text || content.caption) content.caption = text || content.caption
+    else if (content.text) content.text = text || content.text
+    if (typeof content !== 'string') msg[mtype] = {
+        ...content,
+        ...options
+    }
+    if (copy.key.participant) sender = copy.key.participant = sender || copy.key.participant
+    else if (copy.key.participant) sender = copy.key.participant = sender || copy.key.participant
+    if (copy.key.remoteJid.includes('@s.whatsapp.net')) sender = sender || copy.key.remoteJid
+    else if (copy.key.remoteJid.includes('@broadcast')) sender = sender || copy.key.remoteJid
+    copy.key.remoteJid = jid
+    copy.key.fromMe = sender === client.user.id
+
+    return proto.WebMessageInfo.fromObject(copy)
+}
+
+// mtype
+
+
 
 
 try {
