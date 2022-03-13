@@ -1,10 +1,11 @@
-const {
+﻿const {
     default: makeWASocket,
     generateThumbnail,
     getDevice,
     DisconnectReason,
     downloadContentFromMessage,
     delay,
+    fetchLatestBaileysVersion,
     useSingleFileAuthState,
     generateWAMessage,
     prepareWAMessageMedia,
@@ -19,6 +20,7 @@ const CFonts = require('cfonts');
 const gradient = require('gradient-string');
 let package = require('./package.json');
 let session = `./session.json`;
+let { daftar, isilimit, minlimit } = require('./rid_key.js');
 const { state, saveState } = useSingleFileAuthState(session);
 global.config = require('./src/config.json');
 global.API = config.api;
@@ -51,6 +53,7 @@ const cmdMSG = require('./src/cmdMessage.json')
 /** DATABASE */
 let chatsJid = JSON.parse(fs.readFileSync('./db/chatsJid.json', 'utf-8'));
 
+
 const start = async () => {
     CFonts.say(`${package.name}`, {
         font: 'shade',
@@ -66,10 +69,12 @@ const start = async () => {
         transitionGradient: true,
     });
 
+    const { version, isLatest } = await fetchLatestBaileysVersion()
     const client = makeWASocket({
         printQRInTerminal: true,
         logger: pino({ level: 'silent' }),
         auth: state,
+        version,
         browser: [package.name, 'Safari', '3.0'],
     });
 
@@ -189,6 +194,10 @@ client.ev.on('group-participants.update', async (anu) => {
             }
             const isGroupAdmin = groupAdmins.includes(sender)
             const isBotGroupAdmin = groupAdmins.includes(botNumber)
+
+            let datkey = await daftar(from)
+            let user_key = datkey.key
+            let user_limit = datkey.limit
 
             const formattedTitle = isGroupMsg ? groupMetadata.subject : ''
             global.prefix = /^[./~!#%^&+=\-,;:()]/.test(body) ? body.match(/^[./~!#%^&+=\-,;:()]/gi) : '#'
@@ -373,7 +382,7 @@ client.ev.on('group-participants.update', async (anu) => {
                     { quickReplyButton: { displayText: `☎ Owner`, id: `${prefix}owner` } },
                 ]
       
-                let text = `Hi *${pushname}* 👋\n\n` +
+                let text = `Hi *${pushname}* 👋\n*Key* : ${user_key}\n*Limit* : ${user_limit}\n\n` +
                     `${fs.readFileSync('./src/menu.txt', 'utf-8').replace(/prefix /gim, prefix)}`
 
                      client.sendMessage(from, { caption: text, footer, templateButtons: buttonsDefault, location: { jpegThumbnail: (await getBuffer('https://imgdb.net/storage/uploads/68d9c88a5f40fbf7e6c0deb8c511400c90204eaaa62b7a8f4aacab4a6ea261f2.jpg')).buffer, name: `${package.name}` }, headerType: 4 }, { quoted: m })
@@ -397,7 +406,19 @@ client.ev.on('group-participants.update', async (anu) => {
                 ]
                 client.sendMessage(from, { text: `Social Media`, footer:'azran.my.id', templateButtons: buttonsDefault }, { quoted: m })
             }
-
+if (cmd == 'isilimit' || cmd == 'isiulang') {
+                if (user_limit == '0') {
+                    if (args.length < 1) return await reply('Key nya?')
+                    let isiulang = await isilimit(from, args)
+                    let datnya = await isiulang.json()
+                    await reply(`${datnya}`)
+                } else {
+                    await reply(`Limit kamu masih tersedia, pastikan & diharuskan limit harus sudah habis atau 0`)
+                }
+            }
+            if (cmd == 'limit' || cmd == 'isiulang') {
+            await reply(`Limit anda *${user_limit}*`)
+            }
                
             if (/lg/i.test(cmd)) {
               await typing(from)
@@ -406,6 +427,14 @@ client.ev.on('group-participants.update', async (anu) => {
 
            if (/https:\/\/.+\.tiktok.+/g.test(body) && !m.isBot) {
                 try {
+                    // example check limit
+                    if (user_limit == "0") {
+                        await typing(from)
+                        return await reply(`⚠️ *LIMIT ANDA HABIS*
+LINK KEY: ${user_key}\n\nUntuk menambah limit silahkan tap link key di atas melalui shortlink, lalu copy keynya dan kirim perintah *!isilimit KEYMU*
+
+Contoh: !isilimit hMCNn21CkC`)
+                    }
                     url = body.match(/https:\/\/.+\.tiktok.+/g)[0]
                     logEvent(url)
                     await typing(from)
@@ -414,9 +443,12 @@ client.ev.on('group-participants.update', async (anu) => {
                     await waiting(from, m)
                     let caption = `*Success* - ${author} [${data.desc}]`
                     await sendFileFromUrl(from, data.videoUrlNoWatermark.url_list[1], caption, m, '', 'mp4', { height: data.videoUrlNoWatermark.height, width: data.videoUrlNoWatermark.width })
+await reply(`Limit anda tersisa ${user_limit}`)
+                    // example kurangi limit ketika semua di atas sukses
+                    await minlimit(from)
                 } catch (error) {
                     console.log(error);
-                    await reply('an error occurred')
+                    //await reply('an error occurred')
                 }
             }
 
