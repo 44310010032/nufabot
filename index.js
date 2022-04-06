@@ -1,4 +1,4 @@
-﻿const {
+const {
     default: makeWASocket,
     generateThumbnail,
     getDevice,
@@ -14,19 +14,28 @@
     generateWAMessageContent,
     WAProto,
     isJidGroup,
+    jidDecode,
 } = require('@adiwajshing/baileys');
+const tiktok = require('tiktok-scraper-without-watermark')
+const _ = require('lodash')
+const angkaTerbilang = require('@develoka/angka-terbilang-js');
+const translate = require('@vitalets/google-translate-api');
+const fetch = require('node-fetch');
 const pino = require('pino');
 const CFonts = require('cfonts');
 const gradient = require('gradient-string');
 let package = require('./package.json');
 let session = `./session.json`;
-let { daftar, isilimit, minlimit } = require('./rid_key.js');
+let { daftar, isilimit, minlimit, habiskan } = require('./rid_key.js');
+// const { drawImage } = require("./lib/quoteGen.js");
 const { state, saveState } = useSingleFileAuthState(session);
 global.config = require('./src/config.json');
 global.API = config.api;
 global.owner = config.owner;
 global.footer = config.footer;
 global.quot = config.quot;
+const { SID } = require('sid-api')
+const sID = new SID('zrn2021.001@gmail.com', 'Inipassword@123');
 let { igApi, isIgPostUrl, shortcodeFormatter, getSessionId } = require('insta-fetcher');
 const { Sticker, StickerTypes, extractMetadata } = require('wa-sticker-formatter');
 const yts = require('yt-search');
@@ -49,9 +58,14 @@ const { tiktokDL } = require('./lib/tiktok');
 const { download, parseMention } = require('./lib/function');
 const { mp3, mp4, ytIdRegex } = require('./lib/yt');
 const MediafireDL = require('./lib/mediafire');
-const cmdMSG = require('./src/cmdMessage.json')
+const { Gempa, Cuaca} = require("./lib/bmkg")
+const { pasaran } = require("./lib/tgl.js")
+const cmdMSG = require('./src/cmdMessage.json');
+let mulai = fs.statSync('./src/start.txt')
 /** DATABASE */
 let chatsJid = JSON.parse(fs.readFileSync('./db/chatsJid.json', 'utf-8'));
+let premi = JSON.parse(fs.readFileSync('./db/premium.json', 'utf-8'));
+global.p = require('./db/premium.json');
 
 
 const start = async () => {
@@ -166,7 +180,8 @@ client.ev.on('group-participants.update', async (anu) => {
             if (!msg.messages) return
             const m = msg.messages[0]
             if (m.key.fromMe) return
-            const from = m.key.remoteJid;
+            console.log(m);
+            var from = m.key.remoteJid;
             let type = client.msgType = Object.keys(m.message)[0];
             //console.log(m.message.listResponseMessage.singleSelectReply.selectedRowId);
             Serialize(client, m)
@@ -183,6 +198,7 @@ client.ev.on('group-participants.update', async (anu) => {
             const isQuotedSticker = type === 'extendedTextMessage' && content.includes('stickerMessage')
             const sender = m.sender
             const isOwner = config.owner.includes(sender)
+            const isPrem = p.includes(sender)
             let pushname = m.pushName
             const botNumber = client.user.id
             const groupId = isGroupMsg ? from : ''
@@ -194,10 +210,17 @@ client.ev.on('group-participants.update', async (anu) => {
             }
             const isGroupAdmin = groupAdmins.includes(sender)
             const isBotGroupAdmin = groupAdmins.includes(botNumber)
-
-            let datkey = await daftar(from)
-            let user_key = datkey.key
-            let user_limit = datkey.limit
+            var from2;
+            if (from.endsWith('@g.us') == true) {
+              var from2 = m.key.participant;
+            } else {
+              var from2 = m.key.remoteJid;
+            }
+            
+            var datkey = await daftar(from2,pushname);
+            var user_key = datkey.key
+            var user_limit = datkey.limit
+            global.angka = angkaTerbilang(user_limit)
 
             const formattedTitle = isGroupMsg ? groupMetadata.subject : ''
             global.prefix = /^[./~!#%^&+=\-,;:()]/.test(body) ? body.match(/^[./~!#%^&+=\-,;:()]/gi) : '#'
@@ -215,7 +238,18 @@ client.ev.on('group-participants.update', async (anu) => {
 
             const typing = async (jid) => await client.sendPresenceUpdate('composing', jid)
             const recording = async (jid) => await client.sendPresenceUpdate('recording', jid)
-            const waiting = async (jid, m) => await client.sendMessage(jid, { text: '😡 _Sedang diproses..._' }, { quoted: m })
+            const waiting = async (jid, m) => await client.sendMessage(jid, { text: '🤫 _Sedang diproses..._' }, { quoted: m })
+            const templateButtons = [
+              {index: 1, urlButton: {displayText: `Tambah Limit`, url: `${user_key}`}},
+              {index: 2, quickReplyButton: { displayText: `Tutorial`, id: `${prefix}tutorial` } }
+            ]
+            const templateMessage = {
+            text: `⚠ Limit kamu habis, klik tombol di bawah untuk menambah limit hingga 10.`,
+            footer: `Link di bawah khusus untuk ${pushname}`,
+            templateButtons: templateButtons
+            }
+            const habis = async (jid, m) => await  client.sendMessage(jid, templateMessage, {quoted: m})
+          
             global.reply = async (text) => {
                 await client.sendPresenceUpdate('composing', from)
                 return client.sendMessage(from, { text }, { quoted: m })
@@ -283,6 +317,9 @@ client.ev.on('group-participants.update', async (anu) => {
                     })
                 }
             }
+            if(/tutorial/.test (cmd)) {
+              await reply('Check this video for tutorial add limit\nhttps://vt.tiktok.com/ZSdLQfGFx/')
+            }
 
             if (/donasi/.test(cmd)) {
                await typing(from)
@@ -293,51 +330,300 @@ client.ev.on('group-participants.update', async (anu) => {
                client.sendMessage(from, { text, footer:'Semua donasi yang masuk akan digunakan untuk pengembangan BOT ini', templateButtons: buttonsDefault, headerType: 3 }, { quoted: m })
             }
 
-            if (/readmore/.test(cmd)){
-            const more = String.fromCharCode(8206)
-            const readMore = more.repeat(4001)
-            await reply('Pesan readmore' + readMore + 'ini lanjutannya', m)
+                       if (/readmore/.test(cmd)){
+                if (args.length === 0) return reply('Kirim perintah !readmore text1 | text2')
+                    let _text = arg.split('|')[0];
+                    let more2 = arg.split('|')[1];
+
+                const more = String.fromCharCode(8206)
+                const readMore = more.repeat(4001)
+                await reply(_text + readMore + more2, m)
+            }   
+
+if(/surah/.test(cmd)) {
+        try {
+            let example = `*Cara penggunaan :*\n\n` +
+                `_menampilkan ayat secara spesifik :_\n${prefix + cmd} al-mulk 1\n\n` +
+                `_menampilkan beberapa jumlah ayat :_\n${prefix + cmd} al-mulk 1-20\n(dengan artinya) : ${prefix + cmd} al-mulk 1-20 --arti\n`
+            if (args.length < 1) return await reply(example)
+            if (args[1].includes('-')) {
+                const find = await list().then(res => {
+                    return res.find(val => val.name.transliteration.id.toLowerCase() == args[0].toLowerCase())//res.findIndex(val => val.name.transliteration.id.toLowerCase().match(toRegExp(cari)))
+                })
+                const res = await getSurah(find.number)
+                const ayat = res.data.verses
+                const detil = res.data
+                const range = args[1]
+                const idxNUM = range.split('-')
+                const dari = idxNUM[0]
+                const ke = idxNUM[1]
+                const max = (ke - dari);
+                if (max > 30) return await reply('maksimal jumlah ayat yang dapat ditampilkan adalah 30')
+                const selectedRange = ayat.slice(dari - 1, ke)
+
+                var tex = `✅ *Detail Informasi Surah*
+◈ ${'Nama Surah :'} *${detil.name.transliteration.id}*
+◈ ${'No Surah :'} *${res.data.number}*
+◈ ${'Jumlah Ayat :'} *${res.data.numberOfVerses}*
+◈ ${'Arti Surah :'} *${detil.name.translation.id}*
+◈ ${'Tergolong surah ' + detil.revelation.id}\n`
+
+                const withTranslation = flags.includes('arti')
+
+                for (let i = 0; i < selectedRange.length; i++) {
+                    tex += `\n*{ ${selectedRange[i].number.inSurah} }* - ${selectedRange[i].text.arab} ◈${withTranslation ? '\n' + selectedRange[i].translation.id + '\n\n' : '\n'}`
+                }
+                await reply(tex)
+            } else if (!isNaN(args[1])) {
+                const find = await list().then(res => {
+                    return res.find(val => val.name.transliteration.id.toLowerCase() == args[0].toLowerCase())//res.findIndex(val => val.name.transliteration.id.toLowerCase().match(toRegExp(cari)))
+                })
+                const res = await getSurah(find.number, args[1])
+                const detil = res.data.surah
+
+                var tex = `✅ *Detail Informasi Surah*
+◈ ${'Nama Surah :'} *${detil.name.transliteration.id}*
+◈ ${'No Surah :'} *${res.data.surah.number}*
+◈ ${'Jumlah Ayat :'} *${res.data.surah.numberOfVerses}*
+◈ ${'Arti Surah :'} *${detil.name.translation.id}*
+◈ ${'Tergolong surah ' + detil.revelation.id}
+
+*{ ${res.data.number.inSurah} }* - ${res.data.text.arab} ◈\n\n${res.data.translation.id}
+
+◈ Tafsir Ayat: ${res.data.tafsir.id.short}`
+
+                let idMp3 = shrt(res.data.audio.primary, { title: `${detil.name.transliteration.id} - ${res.data.number.inSurah}`, tiktokAudio: true })
+                const btnCover = [
+                    { quickReplyButton: { displayText: `Audio`, id: `${prefix}sendthis ${idMp3.id}` } },
+                ]
+                let buttonMessage = {
+                    text: tex,
+                    footer,
+                    templateButtons: btnCover,
+                }
+                await client.sendMessage(m.chat, buttonMessage, { quoted: m })
+            } else {
+                const find = await list().then(res => {
+                    return res.find(val => val.name.transliteration.id.toLowerCase() == args[0].toLowerCase())//res.findIndex(val => val.name.transliteration.id.toLowerCase().match(toRegExp(cari)))
+                })
+                const res = await getSurah(find.number, args[1])
+                const detil = res.data.surah
+
+                var tex = `✅ *Detail Informasi Surah*
+◈ ${'Nama Surah :'} *${detil.name.transliteration.id}*
+◈ ${'No Surah :'} *${res.data.number}*
+◈ ${'Jumlah Ayat :'} *${res.data.numberOfVerses}*
+◈ ${'Arti Surah :'} *${detil.name.translation.id}*
+◈ ${'Tergolong surah ' + detil.revelation.id}
+
+◈ Tafsir : ${res.data.tafsir.id}`
+
+            }
+        } catch (error) {
+            console.log(error);
+            await reply(util.format(error))
+        }
+    }
+
+
+async function list() {
+    const { data } = await axios.get('https://api.quran.sutanlab.id/surah')
+    return data.data
+}
+
+async function getSurah(number, ayat = '') {
+    const { data } = await axios.get(`https://api.quran.sutanlab.id/surah/${number}/${ayat}`)
+    return data
+}    
+
+          if(cmd=='listsurah'){
+             try {
+            let example = `*Cara penggunaan :*\n\n` +
+                `_menampilkan ayat secara spesifik :_\n${prefix}surah al-mulk 1\n\n` +
+                `_menampilkan beberapa jumlah ayat :_\n${prefix}surah al-mulk 1-20\n(dengan artinya) : ${prefix}surah al-mulk 1-20 --arti\n`
+            const find = await list()
+            let tex = `${example}\n\nlist surah :`
+            for (let x of find) {
+                tex += `\n◈ *_${x.number}._* ${x.name.transliteration.id}`
             }
 
-            if (cmd == 'bc' && isOwner) {
-                try {
-                    if (args.length < 1) return reply('text nya mana?')
-                    reply(`sending broadcast message to *${chatsJid.length}* chats, estimated ${Math.floor((5 * chatsJid.length) / 60)} minutes done.`)
-                    if (isMedia || /image|video/i.test(m.quoted ? m.quoted.mtype : m.mtype)) {
-                        //const buff = await downloadMediaMessage(m.quoted ? m.quoted : m.message.imageMessage)
-                        for (let v of chatsJid) {
-                            await delay(5000)
-                            let ms = m.quoted ? m.getQuotedObj() : m
-                            await copyNForward(v, cMod(v, ms, `📢 *NufaBOT Broadcast*\n\n${args.join(' ')}\n\n#${chatsJid.indexOf(v) + 1}`, client.user.id), true)
-                        }
-                        reply(`Broadcasted to *${chatsJid.length}* chats`)
-                    } else {
-                        for (let v of chatsJid) {
-                            await delay(5000)
-                            await client.sendMessage(v, { text: `📢 *NufaBOT Broadcast*\n\n${args.join(' ')}\n\n#${chatsJid.indexOf(v) + 1}` }, { sendEphemeral: true })
-                        }
-                        reply(`Broadcasted to *${chatsJid.length}* chats`)
-                    }
-                } catch (error) {
-                    reply(util.format(error))
-                    console.log(error);
+            await reply(tex)
+        } catch (error) {
+            console.log(error);
+            await reply('error, tidak ditemukan')
+        }
+  
+
+async function list() {
+    const { data } = await axios.get('https://api.quran.sutanlab.id/surah')
+    return data.data
+}
+          }
+
+          if ( cmd == 'prem'){
+            if(!isPrem) return reply ('Bukan owner')
+            await reply ('ok')
+          }
+
+
+            if (cmd == 'autoread' && isOwner) {
+            try {
+            await client.presenceSubscribe(m.chat)
+            await client.sendPresenceUpdate('composing', m.chat)
+            if (args[0] === 'on') {
+                if (config.autoReads) return await reply('✅ *Auto Read* sudah Aktif sebelumnya!')
+                config.autoReads = true
+                fs.writeFileSync('./src/config.json', JSON.stringify(config, null, 2))
+                await reply('✅ *Auto Read* Aktif!')
+            } else if (args[0] == 'off') {
+                if (!config.autoReads) return reply('❌ *Auto Read* sudah Nonaktif sebelumnya!')
+                config.autoReads = false
+                fs.writeFileSync('./src/config.json', JSON.stringify(config, null, 2))
+                await reply('❌ *Auto Read* Nonaktif!')
+            } else {
+                await reply('silahkan pilih on / off')
+            }
+        } catch (error) {
+            await reply(util.format(error))
+            console.log(error);
+        }
+    }
+          if (/mix/.test(cmd)){
+             try {
+            const kitchen = require('./lib/emojikitchen')
+            if (flags.find(v => v.match(/shuffle|random/))) {
+                const emoji = kitchen.shuffle()
+                const res = await kitchen.mix(emoji[0], emoji[1])
+                const data = new Sticker(_.sample(res.results).url, { packname: package.name, author: '@theazran_' })
+                await client.sendMessage(from, await data.toMessage(), { quoted: m })
+              
+            } else {
+                const parsed = kitchen.parseEmoji(body)
+                if (parsed.length < 1) return reply('emoji not supported, try another one.\n\nDo Note! that not all emojis are supported yet')
+                const res = await kitchen.mix(parsed.length == 1 ? parsed[0] : parsed[0], parsed[1])
+                const img = _.sample(res.results).url
+                if (flags.find(v => v.match(/image|img|i/))) {
+                    await client.sendFileFromUrl(from, img, `success ${shortenerAuth ? `https://s.id/${(await sID.short(img)).link.short}` : ''}`)
+                } else {
+                    const data = new Sticker(img, { packname: `NufaBOT`, author: 'by @theazran_' })
+                    await client.sendMessage(m.chat, await data.toMessage(), { quoted: m })
                 }
             }
+        } catch (error) {
+            await reply('emoji not supported, try another one.\n\nDo Note! that not all emojis are supported')
+            console.log(error);
+        }
+    }
+          
+            if (cmd == 'bilang'){
+              await reply(angkaTerbilang(args))
+            }
+    
 
-            // if (/vn/.test(cmd)) {
-            //   vnku = fs.readFileSync('./src/vn.mp3')
-            //   client. sendMessage(from, { audio: vnku, mimetype: 'audio/ogg; codecs=opus',  ptt: true })
-            // }
+          if (body == 'tebakgambar') {
+                var apiKey = 'ridah2-Tuf7l41' // change with your key self.
+                var urlApi = 'https://www.api.ridped.com/api'
+        client.gtp = client.gtp ? client.gtp : {}
+        if (from in client.gtp) {
+            return await client.sendMessage(from, { text: `Masih ada tebakgambar yang belum anda jawab disini` }, { quoted: m })
+        }
+        await client.sendMessage(from, { text: 'Tunggu sebentar...' }, { quoted: m })
+        var gtp = await fetch(urlApi + '?feature=tebakgambar&apikey=' + apiKey)
+        var datjson = await gtp.json()
+        var caption = `Silahkan jawab tebakgambar ini. Waktu untuk menjawab 25 detik!.
+Bantuan : *${datjson.jawaban.replace(/[bcdfghjklmnpqrstvwxyz]/g, '_')}*`
+        if (datjson.status == false) {
+            return await client.sendMessage(from, { text: datjson.msg })
+        }
+        return client.gtp[from] = [
+            await client.sendMessage(from, { image: { url: datjson.img }, caption: caption, mimetype: 'image/jpeg' }),
+            datjson,
+            setTimeout(() => {
+                if (client.gtp[from]) client.sendMessage(from, { text: `Waktu telah habis, jawabanya adalah : *${datjson.jawaban}*`})
+                return delete client.gtp[from]
+            }, 25000)
+        ]
+    }
+    
+    try {
+        if (from in client.gtp) {
+            var j_user = m.message.conversation
+            var jawaban = client.gtp[from][1].jawaban
+            if (j_user.toLowerCase() == jawaban.toLowerCase()) {
+                await client.sendMessage(from, { text: `Benar`}, { quoted: m})
+                clearTimeout(client.gtp[from][2])
+                return delete client.gtp[from]
+            } else {
+                return await client.sendMessage(from, { text: 'Salah' }, { quoted: m })
+            }
+        }
+    } catch (e) {}
+
+           if (cmd == 'tr' || cmd == 'translate'){
+              try {
+            let lang = args[0]
+            if (!lang) return await reply(`code bahasa tujuan diperlukan, contoh ${prefix + cmd} id i love you, not only at this time`)
+            if (m.quoted) {
+                _text = m.quoted.text
+                const tr = (await translate(_text, { to: lang })).text
+                await reply(tr)
+            } else if (args.length >= 2) {
+                _text = args.slice(1).join(' ')
+                const tr = (await translate(_text, { to: lang })).text
+                await reply(tr)
+            } else {
+                await reply(`reply pesan atau masukkan text, contoh ${prefix + cmd} id i love you, not only at this time`)
+            }
+        } catch (error) {
+            console.log(error);
+            await reply('error, sepertinya code bahasa tidak support')
+        }
+    }
+
+          // if(/ridtest/.test(cmd)) {
+          //   return reply('mynumb ' + from2);
+          // }
+          if (/quotemaker/.test(cmd)) {
+            if (args.length === 0) return reply('Cara penggunaan : \n quotemaker INI QUOTE | INI WATERMARK | url gambar\n\n NOTE: \n - QUOTE harus di isi\n- WATERMARK JIKA TIDAK DI ISI MAKA YG DI DISPLAY NAMA ANDA\n- Url gambar jika tidak di isi maka default https://ridped.com/way/mypp2.png');
+            await typing(from);
+            let _text = arg.split('| ')[0];
+            let wm = arg.split('| ')[1] ? arg.split('| ')[1] : pushname;
+            let bg = arg.split('| ')[2] ? arg.split('| ')[2] : 'https://ridped.com/way/mypp2.png';
+            return await client.sendMessage(from, { image: { url: `https://www.api.ridped.com/api?feature=quotemaker&apikey=R!dp3d&text=${_text}&wm=${wm}&bg=${bg}`}, caption: `https://www.api.ridped.com/api?feature=quotemaker&apikey=KEPO&text=${_text}&wm=${wm}&bg=${bg}`, mimetype: `image/jpeg`}, { quoted: m});
+          }
+             if(/ig/.test(cmd)){
+               if (args.length === 0) return reply('*Ex.* !ig theazran_')
+              let ige = await ig.fetchUser(args)
+               return await client.sendMessage(from, { image: { url: ige.hd_profile_pic_url_info.url}, caption:`
+*Full Name:* ${ige.fullname}
+*Username:* ${ige.username}
+*Followers:* ${ige.followers}
+*Following:* ${ige.following}
+*Total Post:* ${ige.post_count}
+*Bio:* ${ige.biography}
+instagram.com/${ige.username}`, mimetype: `image/jpeg`}, { quoted: m});
+          }
+           if(/gg/.test(cmd)){
+             ig.fetchUser('mg.creativestudio').then((res) => {
+    console.log(res);
+});
+           }
+          
+
 
             if (/ping/.test(cmd)){
               await typing(from)
+              mtime = new Date(mulai.mtime)
+        now = new Date()
               const buttonsDefault = [
                 {index: 2, urlButton: {displayText: 'Instagram', phoneNumber: 'https://instagram.com/theazran_'}},
                     {index: 2, callButton: {displayText: 'Call me!', phoneNumber: '+6285255646434'}},
                  { quickReplyButton: { displayText: `OWNER`, id: `${prefix}owner` } },
                  { quickReplyButton: { displayText: `MENU`, id: `${prefix}menu` } },
                 ]
-              client.sendMessage(from, { caption: '💬 Bot online', footer, templateButtons: buttonsDefault, location: { jpegThumbnail: (await getBuffer('https://imgdb.net/storage/uploads/68d9c88a5f40fbf7e6c0deb8c511400c90204eaaa62b7a8f4aacab4a6ea261f2.jpg')).buffer, name: `${package.name}` }, headerType: 4 }, { quoted: m })
+              client.sendMessage(from, { caption: `💬 Bot online
+Bot Run Time : ${moment.duration((now - mtime) / 1000, 'seconds').humanize()}
+Total user: ${chatsJid.length}`, footer, templateButtons: buttonsDefault, location: { jpegThumbnail: (await getBuffer('https://imgdb.net/storage/uploads/68d9c88a5f40fbf7e6c0deb8c511400c90204eaaa62b7a8f4aacab4a6ea261f2.jpg')).buffer, name: `${package.name}` }, headerType: 4 }, { quoted: m })
             }
        
             if (/qris/.test(cmd)) {
@@ -371,6 +657,7 @@ client.ev.on('group-participants.update', async (anu) => {
                     reply('aww snap. error occurred')
                 }
             }
+        
 
             if (cmd == 'help' || cmd == 'menu') {
                 await typing(from)
@@ -382,7 +669,7 @@ client.ev.on('group-participants.update', async (anu) => {
                     { quickReplyButton: { displayText: `☎ Owner`, id: `${prefix}owner` } },
                 ]
       
-                let text = `Hi *${pushname}* 👋\n*Key* : ${user_key}\n*Limit* : ${user_limit}\n\n` +
+                let text = `Hi *${pushname}* 👋\n*Key* : ${user_key}\n*Limit Anda sat ini* : ${user_limit}\n\n` +
                     `${fs.readFileSync('./src/menu.txt', 'utf-8').replace(/prefix /gim, prefix)}`
 
                      client.sendMessage(from, { caption: text, footer, templateButtons: buttonsDefault, location: { jpegThumbnail: (await getBuffer('https://imgdb.net/storage/uploads/68d9c88a5f40fbf7e6c0deb8c511400c90204eaaa62b7a8f4aacab4a6ea261f2.jpg')).buffer, name: `${package.name}` }, headerType: 4 }, { quoted: m })
@@ -409,60 +696,137 @@ client.ev.on('group-participants.update', async (anu) => {
 if (cmd == 'isilimit' || cmd == 'isiulang') {
                 if (user_limit == '0') {
                     if (args.length < 1) return await reply('Key nya?')
-                    let isiulang = await isilimit(from, args)
-                    let datnya = await isiulang.json()
-                    await reply(`${datnya}`)
+                    let isiulang = await isilimit(from2, args)
+                    await reply(`${isiulang.msg}`)
                 } else {
-                    await reply(`Limit kamu masih tersedia, pastikan & diharuskan limit harus sudah habis atau 0`)
+                    await reply(`Limit kamu masih ada *${angka}*, Habiskan terlebih dahulu!`)
                 }
             }
-            if (cmd == 'limit' || cmd == 'isiulang') {
-            await reply(`Limit anda *${user_limit}*`)
+            if (cmd == 'limit' || cmd == 'ceklimit') {
+            if(isPrem && isOwner) return reply('Limit anda tidak terbatas!')
+            if (user_limit == "0") {
+                        await typing(from)
+                        return await habis(from, m)
+                     }
+            await reply(`Limit kamu masih ada *${angka}*`)
             }
                
             if (/lg/i.test(cmd)) {
               await typing(from)
-              await reply('https://chat.whatsapp.com/IQuBTCget6oLpFeI0WrrjE')
+              await reply(`*Group NufaBOT\n*https://chat.whatsapp.com/IQuBTCget6oLpFeI0WrrjE`)
             }
+          if(/tagall/i.test(cmd)) {
+              try {
+            const groupMembers = (await client.groupMetadata(m.chat)).participants
+            let type = m.quoted ? m.quoted.mtype : m.mtype
+            if (cmd == 'hidetag') {
+                let text = args.join(' ')
+                if (/image|video|audio|sticker/i.test(type)) {
+                    let ms = m.quoted ? m.getQuotedObj() : m
+                    await client.copyNForward(m.chat, client.cMod(m.chat, ms, text, client.user.id), true, { mentions: groupMembers.map(x => x.id) })
+                } else {
+                    client.sendMessage(m.chat, { text, mentions: groupMembers.map(x => x.id) })
+                }
+            } else {
+                text = args.length >= 1 ? `@${jidDecode(m.sender).user} : ${args.join(' ')}\n` : '*Tag All Members*\n'
+                n = 1
+                for (let i of groupMembers) {
+                    text += `\n*_${n}_.* @${jidDecode(i.id).user}`
+                    n++
+                }
+
+                if (/image|video/i.test(type)) {
+                    let ms = m.quoted ? m.getQuotedObj() : m
+                    await client.copyNForward(m.chat, client.cMod(m.chat, ms, text, client.user.id, { mentions: groupMembers.map(x => x.id) }), true, { mentions: groupMembers.map(x => x.id) })
+                } else {
+                    client.sendMessage(m.chat, { text, mentions: groupMembers.map(x => x.id) })
+                }
+
+            }
+        } catch (error) {
+            console.log(error);
+        }
+    }
+          
 
            if (/https:\/\/.+\.tiktok.+/g.test(body) && !m.isBot) {
                 try {
                     // example check limit
-                    if (user_limit == "0") {
+                    if (user_limit == "0" && !isPrem) {
                         await typing(from)
-                        return await reply(`⚠️ *LIMIT ANDA HABIS*
-LINK KEY: ${user_key}\n\nUntuk menambah limit silahkan tap link key di atas melalui shortlink, lalu copy keynya dan kirim perintah *!isilimit KEYMU*
-
-Contoh: !isilimit hMCNn21CkC`)
-                    }
+                        return await habis(from, m)
+                     }
                     url = body.match(/https:\/\/.+\.tiktok.+/g)[0]
                     logEvent(url)
+                    await waiting(from, m)
                     await typing(from)
                     const data = await tiktokDL(url)
-                    let author = `Video from https://www.tiktok.com/@${data.authorMeta.username}` || ''
-                    await waiting(from, m)
-                    let caption = `*Success* - ${author} [${data.desc}]`
+                    let author = `${data.authorMeta.username}` || ''
+
+                  // \n*Author:* ${author}\n*Desc:* ${data.desc}]
+                    let sisa = user_limit - 1
+                    let caption = `*Success...*\n*[1 Limit terpakai]*\nlimit tersisa ${sisa} (${angkaTerbilang(sisa)})`
+                    
                     await sendFileFromUrl(from, data.videoUrlNoWatermark.url_list[1], caption, m, '', 'mp4', { height: data.videoUrlNoWatermark.height, width: data.videoUrlNoWatermark.width })
-await reply(`Limit anda tersisa ${user_limit}`)
-                    // example kurangi limit ketika semua di atas sukses
-                    await minlimit(from)
-                } catch (error) {
-                    console.log(error);
-                    //await reply('an error occurred')
+                    // example kurangi limit ketika semua di atas sukses 
+                    await minlimit(from2 && !isPrem)
+                } catch (error) {                    console.log(error)
+                    //await reply('an error occurred
                 }
             }
+          
+          // if (/https:\/\/.+\.tiktok.+/g.test(body) && !m.isBot){
+          //   try {
+          //           // example check limit
+          //           if (user_limit == "0" && !isOwner) {
+          //               await typing(from)
+          //               return await habis(from, m)
+          //            }
+          //   await waiting(from, m)
+          //   await typing(from)
+          //   const url = body.match(/https:\/\/.+\.tiktok.+/g)[0]
+          //   const data = await tiktok.tiktokdownload(url)
+          //   let capt = '✅ Success..\n*1 limit terpakai*'
+          //   await sendFileFromUrl(from, data.nowm, capt, m, '', 'mp4')
+          //   await minlimit(from2)
+          //       } catch (error) {                    
+          //         console.log(error)
+          //           // await reply('an error occurred
+          //       }
+          //   }
+      
+          
+            if(/habiskan/.test(cmd)){
+            await habiskan(from2)
+            await reply('✅ Berhasil, Limit dihabiskan.\nSilahkan ketik *.ceklimit* untuk melihat link tambah limit')
+          }
 
             if (/pp|gantipp/.test(cmd)) {
               if (!isOwner) return reply('⚠ Hanya owner!')
               let media = await m.quoted.download()
               return await client.updateProfilePicture(client.user.id, media)
             }
-
+    
             if (/del|delete/.test(cmd)){
               if (m.quoted && !m.quoted.isBot) return reply('⚠ Reply pesan dari Bot!')
               client.sendMessage(from,{delete: {remoteJid: from, fromMe: true, id: m.quoted.id, participant: m.quoted.sender}})
             }
 
+
+if (/https?:\/\/sfile.mobi\/[0-9-a-zA-Z_]{1,20}/g.test(body) && !m.isBot) {
+  try {
+    url = body.match(/https?:\/\/sfile.mobi\/[0-9-a-zA-Z_]{1,20}/g)[0]
+    logEvent(url);
+    await typing(from)
+    let fetchs = await fetch(`https://www.api.ridped.com/api?feature=sfile&apikey=R!dp3d&url=${url}`);
+    let jeeson = await fetchs.json();
+    await client.sendMessage(from, { document: { url: jeeson.link}, fileName: `NufaBOT - ${jeeson.uploaded}.npv4`, mimetype: 'application/npv4'})
+    await reply (`User: ${jeeson.user}\nUpload pada: ${jeeson.uploaded}\nTotal Download:${jeeson.total_download}\nDesc: ${jeeson.desc}`)
+  } catch (error) {
+    console.log(error);
+          await reply('an error occurred')
+  }
+}
 
             if (/https?:\/\/twitter.com\/[0-9-a-zA-Z_]{1,20}\/status\/[0-9]*/g.test(body) && !m.isBot) {
                 try {
@@ -480,15 +844,24 @@ await reply(`Limit anda tersisa ${user_limit}`)
                     await reply('an error occurred')
                 }
             }
+          if(/ccc/.test(cmd)){
+            await client.sendMessage('6285255646434@s.whatsapp.net', { forward: msg }) 
+          }
+
             
             if (/https?:\/\/(web\.|www\.|m\.)?(facebook|fb)\.(com|watch)\S+/g.test(m.text) && !m.isBot) {
                 try {
+                  if (user_limit == "0") {
+                        await typing(from)
+                        return await habis(from, m)
+                     }
                     url = body.match(/https?:\/\/(web\.|www\.|m\.)?(facebook|fb)\.(com|watch)\S+/g)[0]
                     logEvent(url);
                     await typing(from)
                     let data = await fetchAPI('masgi', '/facebook/?url=' + url)
                     await waiting(from, m)
                     await sendFileFromUrl(from, data.videoUrl, `*Success* - ${data.title}`, m, '', 'mp4')
+                    await minlimit(from2)
                 } catch (error) {
                     console.log(error);
                     await reply('an error occurred')
@@ -515,6 +888,9 @@ await reply(`Limit anda tersisa ${user_limit}`)
 
             // if (/(?:https?:\/\/)?(?:www\.)?(?:instagram\.com(?:\/\w+)?\/(p|reel|tv)\/)([\w-]+)(?:\/)?(\?.*)?$/gim.test(body) && !m.isBot) {
                 try {
+                  if (user_limit == "0") {
+await typing(from)
+return await habis(from, m)}
                     let { type, shortcode } = shortcodeFormatter(body)
                     url = `https://www.instagram.com/${type}/${shortcode}`;
                     logEvent(url);
@@ -525,17 +901,19 @@ await reply(`Limit anda tersisa ${user_limit}`)
                     capt += '• Nama : ' + result.name + '\n';
                     capt += '• Username : ' + result.username + '\n';
                     capt += '• Likes : ' + result.likes + '\n';
-                    capt += '• Media Count : ' + result.media_count;
+                    capt += '• Media Count : ' + result.media_count; + '\n';
                     // reply(capt)
                     for (let i = 0; i < arr.length; i++) {
                         if (arr[i].type == "image") {
                             await sendFileFromUrl(from, arr[i].url, `${capt}`, m, '', 'jpeg',
                                 { height: arr[i].dimensions.height, width: arr[i].dimensions.width }
                             )
+                            await minlimit(from2)
                         } else {
                             await sendFileFromUrl(from, arr[i].url, `${capt}`, m, '', 'mp4',
                                 { height: arr[i].dimensions.height, width: arr[i].dimensions.width }
                             )
+                            await minlimit(from2)
                         }
                     }
                 } catch (error) {
@@ -548,6 +926,10 @@ await reply(`Limit anda tersisa ${user_limit}`)
                 try {
                     await typing(from)
                     await waiting(from, m)
+                    if (user_limit == "0") {
+                        await typing(from)
+                        return await habis(from, m)
+                     }
                     let regex = new RegExp(/https:\/\/(www\.)?instagram\.com\/stories\/.+/g)
                     let u = body.match(regex)[0]
                     logEvent(u);
@@ -560,22 +942,29 @@ await reply(`Limit anda tersisa ${user_limit}`)
                             from, media[0].url, `_Stories from @${username}_\nTaken at : ${moment(media[0].taken_at * 1000).format('DD/MM/YY HH:mm:ss')}`, m, '', 'jpeg',
                             { height: media[0].original_height, width: media[0].original_width }
                         )
+                        await minlimit(from2)
                     } else {
                         await sendFileFromUrl(
                             from, media[0].url, `_Stories from @${username}_\nTaken at : ${moment(media[0].taken_at * 1000).format('DD/MM/YY HH:mm:ss')}`, m, '', 'mp4',
                             { height: media[0].original_height, width: media[0].original_width }
                         )
+                        await minlimit(from2)
                     }
                 } catch (error) {
                     reply('an error occurred')
                     console.log(error);
                 }
             }
+          
+          
 
             if (/https:\/\/www\.instagram\.com\/s\/.+story_media_id=([\w-]+)/g.test(body) && !m.isBot) {
                 const link_highlight = /https:\/\/www\.instagram\.com\/s\/(.*?)\?story_media_id=([\w-]+)/g.exec(body)[0]
                 try {
                     await typing(from)
+                    if (user_limit == "0") {
+                    await typing(from)
+                    return await habis(from, m)}
                     logEvent(link_highlight);
                     const username = await axios.get(link_highlight).then(async res => {
                         const { data } = await axios.get(res.request.res.responseUrl + '?__a=1', { headers: { cookie: 'sessionid='+config.session_id}})
@@ -602,6 +991,7 @@ await reply(`Limit anda tersisa ${user_limit}`)
                         : buttonMessage['video'] = { url: filterReels.url }
                     await client.sendMessage(from, buttonMessage, { quoted: m })
                     //await sendFileFromUrl(from, filterReels.url, `*${filterHighlight.title}* - _Highlights from https://www.instagram.com/${username}_\nTaken at : ${moment(filterReels.taken_at * 1000).format('DD/MM/YY HH:mm:ss')}`, m, '', '', { templateButtons: btnCover, footer })
+                    await minlimit(from2)
                 } catch (error) {
                     console.log(error);
                     reply('an error occurred')
@@ -612,6 +1002,7 @@ await reply(`Limit anda tersisa ${user_limit}`)
                 try {
                     let id = db.filter(x => x.id == args[0])[0]
                     await sendFileFromUrl(from, id.url, `Highlight Cover [${id.title}]`, m)
+                    await minlimit(from2)
                 } catch (error) {
                     console.log(error);
                 }
@@ -640,12 +1031,31 @@ await reply(`Limit anda tersisa ${user_limit}`)
                     await reply(error.message)
                 }
             }
-
+          
+if (/8d/.test(cmd)){
+  try {
+            let mediaType = m.quoted ? m.quoted.mtype : m.mtype
+            let msg = m.quoted ? m.quoted : m
+            if (/audio|video|document/i.test(mediaType)) {
+                const buffer = await client.downloadMediaMessage(msg)
+                const res = await EightD(buffer)
+                await client.sendFile(m.chat, res, m, { audio: true })
+            } else {
+                await reply(`reply a video with caption ${prefix}${cmd}`)
+            }
+        } catch (error) {
+            console.log(error);
+            await reply('error')
+        }
+}
 
 
             if (cmd == 'yts' || cmd == 'ytsearch') {
                 if (args.length < 1) return await reply('mau cari apa?')
                 try {
+                    if (user_limit == "0") {
+                    await typing(from)
+                    return await habis(from, m)}
                     let arr = (await yts({ query: arg, hl: 'id' })).videos;
                     let list = new Array();
                     let desc = '*YouTube Search*\n'
@@ -686,26 +1096,18 @@ await reply(`Limit anda tersisa ${user_limit}`)
                     capt += '\nSize : ' + humanFileSize(size, true);
                     await reply(capt);
                     await sendFile(from, path, `${meta.videoDetails.title}.mp3`, 'audio/mp3', m, { jpegThumbnail: (await getBuffer(meta.videoDetails.thumbnails.slice(-1)[0].url)).buffer })
+                    await minlimit(from2)
                 } catch (error) {
                     reply('_Wahh! Nampaknya ada yang error!_')
                     console.log(error);
                 }
             }
 
-            if (/tomp3|toaudio/i.test(cmd)) {
-                    if (isQuotedVideo) {
-                        const buffer = await client.downloadMediaMessage(m.quoted)
-                        const res = await toAudio(buffer)
-                        const message = await prepareWAMessageMedia({ audio: res, mimetype: 'audio/mp3' }, { upload: client.waUploadToServer, })
-                        let media = generateWAMessageFromContent(from, { audioMessage: message.audioMessage }, { quoted: m })
-                        await client.relayMessage(from, media.message, { messageId: media.key.id })
-                    } else {
-                        reply(`reply a video with caption ${prefix}${cmd}`)}
-            }
-
-
             if (cmd == 'yt' || cmd == 'ytmp4'){
                 try {
+                    if (user_limit == "0") {
+                    await typing(from)
+                    return await habis(from, m)}
                     if (args.length < 1 || !isUrl(url)) return await reply('link nya mana?')
                     if (cmd == 'yt' && !m.isBot) {
                         await waiting(from, m)
@@ -733,6 +1135,7 @@ await reply(`Limit anda tersisa ${user_limit}`)
                           //   jpegThumbnail: img.buffer
                         }
                         await client.sendMessage(from, op, { quoted: m })
+                        // await minlimit(from2)
                     } else {
                         await waiting(from, m)
                         let quality = '360p'
@@ -744,6 +1147,7 @@ await reply(`Limit anda tersisa ${user_limit}`)
                             `🕶 Quality : ${data.dl_link[quality].qualityLabel}`
                         // await reply(caption)
                         await sendFileFromUrl(from, data.dl_link[quality].url, caption, m, '', 'mp4', { height: data.dl_link[quality].height, width: data.dl_link[quality].width })
+                        await minlimit(from2)
                     }
                 } catch (error) {
                     reply('an error occurred')
@@ -751,24 +1155,52 @@ await reply(`Limit anda tersisa ${user_limit}`)
                 }
             }
 
+          if(/gempa/.test(cmd)){
+            Gempa().then( v => 
+client.sendMessage(m.chat, { image: { url: v.map }, caption: `*Info Gempa*\n• Waktu: *${v.waktu}*\n• Lintang: *${v.lintang}*\n• Bujur: *${v.bujur}*\n• Magnitudo: *${v.magnitudo}*\n• Kedalaman: *${v.kedalaman}*\n• Wilayah: *${v.wilayah}*\n` }, { quoted: m})
+)
+          }
 
+          if(/cekall/.test(cmd)){
+               if (!isOwner) return 
+  let getGroups = await client.groupFetchAllParticipating();
+let groups = Object.entries(getGroups).slice(0).map(entry => entry[1]);
+let list_group = `*LIST-GROUP*\n\nTotal: *${groups.length}*\n\n`
+for (let x of groups) {
+list_group += `GroupID : ${x.id}\nGroupName : ${x.subject}\n\n`
+}
+await reply(list_group.trim())
+          }
+
+          if(/ht/.test(cmd)){
+if (args.length === 0) return reply(`Contoh:\n!ht halo semua`)
+var h = (await client.groupMetadata(from)).participants.map(a => a.id)
+client.sendMessage(from, { text: args, mentions: h})
+          }
+          
             if (/^s(|ti(c|)ker)$/i.test(cmd)) {
                 let packName = args.length >= 1 ? arg.split('|')[0] : `${package.name}`
                 let stickerAuthor = args.length >= 1 ? arg.split('|')[1] : `${package.author}`
                 let categories = config.stickerCategories[arg.split('|')[2]] || config.stickerCategories['happy']
                 try {
+                  if (user_limit == "0") {
+                    await typing(from)
+                    return await habis(from, m)}
                    await typing(from)
                     if (isMedia && !m.message.videoMessage || isQuotedImage) {
                         const message = isQuotedImage ? m.quoted : m.message.imageMessage
                         const buff = await client.downloadMediaMessage(message)
-                        const data = new Sticker(buff, { pack: packName, author: stickerAuthor, categories, type: StickerTypes.FULL, quality: 50, id: footer })
+                        const data = new Sticker(buff, { pack: packName, author: 'by @theazran_', categories, type: StickerTypes.FULL, quality: 50, id: footer })
+                      
                         await client.sendMessage(from, await data.toMessage(), { quoted: m })
+                      await minlimit(from2)
                     } else if (m.message.videoMessage || isQuotedVideo) {
                         if (isQuotedVideo ? m.quoted.seconds > 15 : m.message.videoMessage.seconds > 15) return reply('too long duration, max 15 seconds')
                         const message = isQuotedVideo ? m.quoted : m.message.videoMessage
                         const buff = await client.downloadMediaMessage(message)
                         const data = new Sticker(buff, { pack: packName, author: stickerAuthor, categories, type: StickerTypes.FULL, quality: 50, id: footer })
                         await client.sendMessage(from, await data.toMessage(), { quoted: m })
+                      await minlimit(from2)
                     } else {
                         reply('Kirim/reply media gambar atau video')
                     }
@@ -801,9 +1233,40 @@ await reply(`Limit anda tersisa ${user_limit}`)
                     }
                 }    
             }
-          
-            
 
+          if(/short/.test(cmd)){
+            try {
+            if (!isUrl(url)) return await reply('bukan url')
+            const {data} = await sID.short(url);
+            await reply('✅ Link berhasil dipendekkan: \ns.id/' + data.short)
+        } catch (error) {
+            console.log(error);
+            await reply('error')
+        }
+    }
+
+          if (/quote/.test(cmd)){
+            try {
+              if (args.length === 0) return m.reply('text quotes tidak boleh kosong')
+              let _text = arg.split('|')[0]
+              let wm = arg.split('|')[1]
+              wm = wm ? `~ ${wm}` : ''
+              if (m.mtype && m.mtype == 'imageMessage' || m.quoted && m.quoted.mtype && m.quoted.mtype == 'imageMessage'){
+                const message = m.quoted ? m.quoted : m
+                const bg = await client.downloadMediaMessage(message)
+                const generated = await drawImage(_text, wm, bg)
+                let caption = ''
+                try {
+                  await client.sendMessage(m.chat, { image: generated.toBuffer(), caption }, { quoted: m })
+                } catch (error) {
+                  
+                }
+              }
+            } catch (error) {
+              
+            }
+          }
+               
             if (/toimg/i.test(cmd)) {
                 if (isQuotedSticker) {
                     try {
@@ -823,7 +1286,7 @@ await reply(`Limit anda tersisa ${user_limit}`)
 
              // Groups Moderation
              if (isCmd && isGroupMsg) {
-                if (isGroupAdmin) return reply(cmdMSG.notGroupAdmin)
+                if (isGroupAdmin) return reply('Hah?')
                 if (isBotGroupAdmin) return reply(cmdMSG.botNotAdmin)
                 switch (cmd) {
                     case '+':
@@ -844,6 +1307,7 @@ await reply(`Limit anda tersisa ${user_limit}`)
                         break;
                     case '-':
                     case 'kick':
+                        if (!isOwner) return await reply('Kick matamu!')
                         if (m.quoted) {
                             const _user = m.quoted.sender;
                             await client.groupParticipantsUpdate(groupId, [_user], 'remove')
