@@ -1,18 +1,51 @@
 {
-	"owner" : ["6285255646434@s.whatsapp.net"],
-	"api": {
-		"masgi": "https://masgimenz.my.id"
-	},
-	"autoReads": true,
-	"footer": "Nufa BOT",
-	"session_id": "51158150518%3AEFBFnx9yY9m2ox%3A20",
-	"stickerCategories": {
-		    "love": ["💖", "💘", "💝"],
-        "happy": ["😀", "😃", "😄", "😁", "😆"],
-        "sad": ["☹", "😣", "😖", "😫", "😩", "😢", "😭"],
-        "angry": ["🤬", "😡", "😠", "🙄", "👿"],
-        "greet": ["👋"],
-        "celebrate": ["🎉", "🎁", "🎈"]
-	},
-	"quot": "```"
+  "owner": [
+    "6285255646434@s.whatsapp.net"
+  ],
+  "api": {
+    "masgi": "https://masgimenz.my.id"
+  },
+  "autoReads": false,
+  "autoPost": true,
+  "footer": "Nufa BOT",
+  "session_id": "52597873662%3AoRl6A5zA45Teek%3A18",
+  "stickerCategories": {
+    "love": [
+      "💖",
+      "💘",
+      "💝"
+    ],
+    "happy": [
+      "😀",
+      "😃",
+      "😄",
+      "😁",
+      "😆"
+    ],
+    "sad": [
+      "☹",
+      "😣",
+      "😖",
+      "😫",
+      "😩",
+      "😢",
+      "😭"
+    ],
+    "angry": [
+      "🤬",
+      "😡",
+      "😠",
+      "🙄",
+      "👿"
+    ],
+    "greet": [
+      "👋"
+    ],
+    "celebrate": [
+      "🎉",
+      "🎁",
+      "🎈"
+    ]
+  },
+  "quot": "```"
 }

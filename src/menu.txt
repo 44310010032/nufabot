@@ -1,6 +1,15 @@
 Silahkan kirim link postingan dari sosial media yang ingin didownload
+*🔥 New :*
+├• prefix surah al-mulk 1-30
+├• prefix readmore text1 | text 2
+├• prefix mix emoji1 emoji2
+├• prefix short <url>
+├• prefix translate id <text>
+├• prefix ceklimit
+├• prefix isilimit <key>
+└• prefix tutorial
 
-*Supported links :*
+*Auto detect links :*
 ├• Facebook 
 ├• Tiktok
 ├• Instagram
